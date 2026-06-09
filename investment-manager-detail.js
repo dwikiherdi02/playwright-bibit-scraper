@@ -379,10 +379,51 @@ async function scrapeWithRetry(page, url, imName, maxRetries = MAX_RETRIES) {
   return { url, im_name: imName, error: lastError?.message ?? "Unknown error" };
 }
 
+// ─── OPTIMIZED FORMAT ────────────────────────────────────────────────────────
+
+const MAIN_FIELDS = [
+  "url", "im_name", "total_aum", "nav", "return_1y",
+  "fund_type", "risk_level", "expense_ratio", "launch_date",
+  "min_purchase", "min_redemption", "custodian_bank", "fund_bank",
+  "purchase_fee", "redemption_fee", "switching_fee",
+];
+const PERF_FIELDS = ["1m", "3m", "ytd", "1y", "3y", "5y", "10y"];
+const ASSET_FIELDS = ["name", "percentage"];
+const HOLDING_FIELDS = ["code", "name"];
+
+/**
+ * Konversi array of detail objects ke format schema-extracted untuk efisiensi token.
+ * Field nested (performance, asset_allocation, top_holdings) punya sub-schema masing-masing.
+ */
+function toOptimizedFormat(data) {
+  return {
+    schema: {
+      main: MAIN_FIELDS,
+      performance: PERF_FIELDS,
+      asset_allocation: ASSET_FIELDS,
+      top_holdings: HOLDING_FIELDS,
+    },
+    data: data.map((item) => ({
+      main: MAIN_FIELDS.map((k) => item[k] ?? null),
+      performance: PERF_FIELDS.map((k) => item.performance?.[k] ?? null),
+      asset_allocation: (item.asset_allocation ?? []).map((a) =>
+        ASSET_FIELDS.map((k) => a[k] ?? null)
+      ),
+      top_holdings_date: item.top_holdings_date ?? null,
+      top_holdings: (item.top_holdings ?? []).map((h) =>
+        HOLDING_FIELDS.map((k) => h[k] ?? null)
+      ),
+    })),
+  };
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  const isOptimized = process.argv.includes("--optimized");
+
   console.log("🚀 Memulai Bibit Reksadana Detail Scraper...\n");
+  if (isOptimized) console.log("📦 Mode: schema-extracted (optimized)\n");
 
   // Baca input
   if (!fs.existsSync(INPUT_FILE)) {
@@ -441,11 +482,13 @@ async function main() {
   }
 
   // Simpan hasil ke JSON (batch save)
-  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(results, null, 2), "utf-8");
+  const outputFile = isOptimized ? "output_im_detail_optimized.json" : OUTPUT_FILE;
+  const outputData = isOptimized ? toOptimizedFormat(results) : results;
+  fs.writeFileSync(outputFile, JSON.stringify(outputData, null, 2), "utf-8");
 
   console.log(`\n${"─".repeat(60)}`);
   console.log(`✅ Selesai! ${successCount} berhasil, ${failCount} gagal.`);
-  console.log(`💾 Hasil disimpan ke: ${OUTPUT_FILE}`);
+  console.log(`💾 Hasil disimpan ke: ${outputFile}`);
 }
 
 main().catch((err) => {

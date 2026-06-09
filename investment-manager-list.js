@@ -12,7 +12,8 @@ const fs = require("fs");
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const BASE_URL =
-  "https://bibit.id/reksadana?limit=20&page={PAGE}&sort=asc&sort_by=7&tradable=1&syariah=1";
+  // "https://bibit.id/reksadana?limit=20&page={PAGE}&sort=asc&sort_by=7&tradable=1&syariah=1";
+  "https://bibit.id/reksadana?limit=20&page={PAGE}&sort=asc&sort_by=7&tradable=1&syariah=1&type=3%2C2%2C1";
 
 const COLUMNS = [
   "im_name",
@@ -232,10 +233,28 @@ async function scrapeViaNetworkIntercept(browser) {
   return apiResponses; // Raw JSON dari API
 }
 
+// ─── OPTIMIZED FORMAT ────────────────────────────────────────────────────────
+
+const SCHEMA = [...COLUMNS, "url"];
+
+/**
+ * Konversi array of objects ke format schema-extracted untuk efisiensi token.
+ * Schema hanya ditulis 1x, data disimpan sebagai array of arrays.
+ */
+function toOptimizedFormat(data) {
+  return {
+    schema: SCHEMA,
+    data: data.map((row) => SCHEMA.map((key) => row[key] ?? null)),
+  };
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  const isOptimized = process.argv.includes("--optimized");
+
   console.log("🚀 Memulai Bibit Reksadana Scraper...\n");
+  if (isOptimized) console.log("📦 Mode: schema-extracted (optimized)\n");
 
   const browser = await chromium.launch({
     headless: true, // Set false untuk debug visual
@@ -250,30 +269,13 @@ async function main() {
 
     console.log(`\n✅ Total data terkumpul: ${data.length} produk reksadana`);
 
-    // Simpan ke JSON
-    // const outputJson = `output_reksadana_${Date.now()}.json`;
-    const outputJson = `output_im_list.json`;
-    fs.writeFileSync(outputJson, JSON.stringify(data, null, 2), "utf-8");
+    const outputJson = isOptimized
+      ? "output_im_list_optimized.json"
+      : "output_im_list.json";
+
+    const outputData = isOptimized ? toOptimizedFormat(data) : data;
+    fs.writeFileSync(outputJson, JSON.stringify(outputData, null, 2), "utf-8");
     console.log(`💾 Disimpan ke: ${outputJson}`);
-
-    // Simpan ke CSV
-    /* const outputCsv = `output_reksadana_${Date.now()}.csv`;
-    const csvHeader = COLUMNS.join(",");
-    const csvRows = data.map((row) =>
-      COLUMNS.map((col) => `"${(row[col] ?? "").replace(/"/g, '""')}"`).join(
-        ","
-      )
-    );
-    fs.writeFileSync(
-      outputCsv,
-      [csvHeader, ...csvRows].join("\n"),
-      "utf-8"
-    );
-    console.log(`📊 CSV disimpan ke: ${outputCsv}`);
-
-    // Preview 3 baris pertama
-    console.log("\n📋 Preview data:");
-    console.table(data.slice(0, 3)); */
   } finally {
     await browser.close();
   }
