@@ -321,14 +321,16 @@ async function scrapeDetailPage(page) {
           const text = row.innerText?.trim();
           if (!text) continue;
 
-          // Split per baris: baris pertama = kode ticker, sisanya = nama perusahaan
+          // Split per baris: jika ada 2+ baris, baris pertama = kode, sisanya = nama.
+          // Jika hanya 1 baris, seluruh teks masuk ke name dan code = null.
           const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
           if (lines.length === 0) continue;
 
-          holdings.push({
-            code: lines[0] || null,
-            name: lines.length > 1 ? lines.slice(1).join(" ") : null,
-          });
+          if (lines.length >= 2) {
+            holdings.push({ code: lines[0], name: lines.slice(1).join(" ") });
+          } else {
+            holdings.push({ code: null, name: lines[0] });
+          }
         }
       }
 
